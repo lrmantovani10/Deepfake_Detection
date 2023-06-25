@@ -3,7 +3,6 @@
 
 # Importing dependencies
 import os, torch, cv2
-import pickle as pk
 import face_recognition as fr
 import numpy as np
 import pandas as pd
@@ -21,7 +20,6 @@ base_path = "archive/real_vs_fake/real-vs-fake/"
 new_train_dir = "data/train/"
 new_test_dir = "data/test/"
 new_val_dir = "data/valid/"
-model_filename = "data/detection_model.pkl"
 weights_filename = "data/detection_model_weights.h5"
 
 
