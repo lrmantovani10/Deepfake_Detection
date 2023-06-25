@@ -27,7 +27,7 @@ if __name__ == "__main__":
     # Hyperparameters
     p1_epochs = 5
     p2_epochs = 15
-    batch_size = 1
+    batch_size = 64
     regularization = 0.001
     margin = 0.8
     lr = 0.0001
@@ -131,7 +131,6 @@ if __name__ == "__main__":
         device,
         p2_epochs,
         regularization,
-        optimizer,
         scheduler2,
     )
 
