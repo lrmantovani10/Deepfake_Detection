@@ -59,27 +59,27 @@ if __name__ == "__main__":
 
     # Generating the datasets for phase 1 using our custom class
     # Offset avoids data repetition between phase 1 and 2
-    train1_dataset = Phase1Data(
-        new_train_dir,
-        transform=transform,
-        fakes=fake_train[: int(len(fake_train) * offset)],
-        reals=real_train[: int(len(real_train) * offset)],
-        offset=offset,
-    )
-    test1_dataset = Phase1Data(
-        new_test_dir,
-        transform=transform,
-        fakes=fake_test[: int(len(fake_test) * offset)],
-        reals=real_test[: int(len(real_test) * offset)],
-        offset=offset,
-    )
-    val1_dataset = Phase1Data(
-        new_val_dir,
-        transform=transform,
-        fakes=fake_val[: int(len(fake_val) * offset)],
-        reals=real_val[: int(len(real_val) * offset)],
-        offset=offset,
-    )
+    # train1_dataset = Phase1Data(
+    #     new_train_dir,
+    #     transform=transform,
+    #     fakes=fake_train[: int(len(fake_train) * offset)],
+    #     reals=real_train[: int(len(real_train) * offset)],
+    #     offset=offset,
+    # )
+    # test1_dataset = Phase1Data(
+    #     new_test_dir,
+    #     transform=transform,
+    #     fakes=fake_test[: int(len(fake_test) * offset)],
+    #     reals=real_test[: int(len(real_test) * offset)],
+    #     offset=offset,
+    # )
+    # val1_dataset = Phase1Data(
+    #     new_val_dir,
+    #     transform=transform,
+    #     fakes=fake_val[: int(len(fake_val) * offset)],
+    #     reals=real_val[: int(len(real_val) * offset)],
+    #     offset=offset,
+    # )
 
     # Generating the datasets for phase 2 using our custom class
     train2_dataset = Phase2Data(new_train_dir, transform=transform, offset=offset)
@@ -87,15 +87,15 @@ if __name__ == "__main__":
     val2_dataset = Phase2Data(new_val_dir, transform=transform, offset=offset)
 
     # Generating the dataloaders for phase 1
-    train1_loader = DataLoader(
-        train1_dataset, batch_size=batch_size, shuffle=True, num_workers=workers
-    )
-    test1_loader = DataLoader(
-        test1_dataset, batch_size=batch_size, shuffle=True, num_workers=workers
-    )
-    val1_loader = DataLoader(
-        val1_dataset, batch_size=batch_size, shuffle=True, num_workers=workers
-    )
+    # train1_loader = DataLoader(
+    #     train1_dataset, batch_size=batch_size, shuffle=True, num_workers=workers
+    # )
+    # test1_loader = DataLoader(
+    #     test1_dataset, batch_size=batch_size, shuffle=True, num_workers=workers
+    # )
+    # val1_loader = DataLoader(
+    #     val1_dataset, batch_size=batch_size, shuffle=True, num_workers=workers
+    # )
 
     # Generating the dataloaders for phase 2
     train2_loader = DataLoader(
@@ -110,56 +110,46 @@ if __name__ == "__main__":
 
     print("data loaders generated!")
 
-    # Phase 1 training
-    phase1_train(
+    # # Phase 1 training
+    # phase1_train(
+    #     model,
+    #     train1_loader,
+    #     optimizer,
+    #     margin,
+    #     device,
+    #     p1_epochs
+    # )
+
+    # # Phase 1 validation
+    # phase1_val(
+    #     model,
+    #     val1_loader,
+    #     optimizer,
+    #     margin,
+    #     device,
+    #     scheduler1
+    # )
+
+    # # Phase 1 testing
+    # phase1_test(model, test1_loader, margin, device)
+
+    # Phase 2 training
+    phase2_train(
         model,
-        train1_loader,
+        train2_loader,
         optimizer,
-        margin,
+        cross_entropy_loss,
         device,
-        p1_epochs
+        p2_epochs,
+        regularization,
     )
 
-    # Phase 1 validation
-    phase1_val(
-        model,
-        val1_loader,
-        optimizer,
-        margin,
-        device,
-        scheduler1
-    )
 
-    # Phase 1 testing
-    phase1_test(model, test1_loader, margin, device)
-
-    # phase2()
-
-# Determine if scheduler steps
+# ## VALIDATION
+# # Determine if scheduler steps
 # gate_cross = False
-# # Phase 2 training
-# for epoch in range(p2_epochs):
 
-#     # Training phase
-#     train(model, cross_entropy_loss, optimizer, scheduler, epoch, batch_size, regularization, device, new_train_dir)
-#     # Testing phase
-#     test(model, cross_entropy_loss, epoch, batch_size, regularization, device, new_test_dir
-
-
-#     # Applying regularization to the cross entropy loss function
-#     regularization_term = 0
-#     for param in model.parameters():
-#         # Adding L2 Norm to running sum
-#         regularization_term += torch.norm(param)
-
-#     # Multiplying by regularization factor and adding to cross entropy loss
-#     cross_entropy_loss += regularization * regularization_term
-
-#     # Backpropagation
-#     loss.backward()
-
-
-#### MOVE THIS NEXT PART TO VALIDATION (NOT TRAINING) STEP. Look at phase 1 implemnentation
+# ### Look at phase 1 implemnentation for this
 #     if train2_acc >= 0.9 and epoch > 15:
 
 #         if not gate_cross:

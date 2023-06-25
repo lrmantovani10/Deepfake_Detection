@@ -524,11 +524,10 @@ def generate_cnn():
             self.swish = nn.SiLU(inplace=True)
             # Convolutional layer
             self.conv = nn.Conv2d(256, 256, kernel_size=3, stride=1, padding="same")
-            # Fully connected layer to generate a 2 x 1 output with 2x2 weights
-            self.linear = nn.Linear(2, 2)
-
+            # Final layer that generates the classifier output
+            self.final = nn.Linear(2, 1)
             # Setting the layers to a module list
-            self.layers = nn.ModuleList([self.bn, self.swish, self.conv, self.linear])
+            self.layers = nn.ModuleList([self.bn, self.swish, self.conv, self.final])
 
         # Forward pass
         def forward(self, x):
@@ -538,10 +537,9 @@ def generate_cnn():
                 out = layer(out)
 
             # Reshape to two dimensions with reduce_mean
-            # and generate the output from the linear layer
+            # and generate the output from the final linear layer
             value_mean = out.view(2, -1).mean(dim=1)
             result = self.layers[-1](value_mean)
-
             return result
 
     # Return an instance of the CNN model
@@ -648,9 +646,12 @@ def phase1_train(
     p1_epochs,
 ):
     for epoch in range(p1_epochs):
+        total_accuracy = 0
         for anchor, positive, negative in train1_loader:
             # Calculating the loss
-            loss, image_fs = fit_forward_cffn(model, anchor, positive, negative, margin, device)
+            loss, image_fs = fit_forward_cffn(
+                model, anchor, positive, negative, margin, device
+            )
 
             # Obtaining the anchor, positive, and negative outputs
             anchor, positive, negative = image_fs
@@ -673,7 +674,14 @@ def phase1_train(
                     epoch, train1_acc, loss.item()
                 )
             )
+
+        # Print the final metrics
         print("Epoch {} concluded".format(epoch))
+        print(
+            "FINAL METRICS - <Training 1> Loss: {} | Accuracy: {}".format(
+                loss.item(), total_accuracy / len(train1_loader)
+            )
+        )
 
 
 # Phase 1 validation
@@ -690,7 +698,9 @@ def phase1_val(
     # Validation step -- fine-tuning the learning rate hyperparameter
     for anchor, positive, negative in val1_loader:
         # Calculating the loss
-        loss, image_fs = fit_forward_cffn(model, anchor, positive, negative, margin, device)
+        loss, image_fs = fit_forward_cffn(
+            model, anchor, positive, negative, margin, device
+        )
 
         # Obtaining the anchor, positive, and negative outputs
         anchor, positive, negative = image_fs
@@ -711,22 +721,116 @@ def phase1_val(
         # Print the accuracy and loss
         print("<Validation 1> Accuracy {} | Loss: {}".format(val1_acc, loss.item()))
 
+    # Print the final metrics
+    print("Validation of phase 1 concluded")
+    print(
+        "FINAL METRICS - <Training 1> Loss: {} | Accuracy: {}".format(
+            loss.item(), total_accuracy / len(test1_loader)
+        )
+    )
+
 
 # Phase 1 testing
 def phase1_test(model, test1_loader, margin, device):
     # Testing Step -- monitoring accuracy and loss
+    total_accuracy = 0
     for anchor, positive, negative in test1_loader:
         # Calculating the loss
-        loss, image_fs = fit_forward_cffn(model, anchor, positive, negative, margin, device)
+        loss, image_fs = fit_forward_cffn(
+            model, anchor, positive, negative, margin, device
+        )
 
         # Obtaining the anchor, positive, and negative outputs
         anchor, positive, negative = image_fs
 
         # Calculate the accuracy
         test1_acc = triplet_accuracy(anchor, positive, negative, margin)
+        total_accuracy += test1_acc
 
         # Print the accuracy and loss
         print("<Testing 1> Accuracy {} | Loss: {}".format(test1_acc, loss.item()))
 
+    # Print the final metrics
+    print("Testing of phase 1 concluded")
+    print(
+        "FINAL METRICS - <Training 1> Loss: {} | Accuracy: {}".format(
+            loss.item(), total_accuracy / len(test1_loader)
+        )
+    )
+
     # Save the model
     # torch.save(model.state_dict(), "phase1_model.pt")
+
+
+# Regularization function
+def regularize(model, regularization):
+    regularization_term = 0
+    for param in model.parameters():
+        # Adding L2 Norm to running sum
+        regularization_term += torch.norm(param)
+
+    # Multiplying by the regularization term
+    return regularization * regularization_term
+
+
+# Function to compute the accuracy of the model
+def accuracy_ce(output, label):
+    # Compute the accuracy
+    accuracy = torch.sum(
+        # Check if the output is greater than 0.5
+        torch.round(output)
+        == label
+    ).item() / output.size(0)
+    return accuracy
+
+
+# phase 2 training
+def phase2_train(
+    model, train2_loader, optimizer, cross_entropy, device, p2_epochs, regularization
+):
+    # Training step
+    for epoch in range(p2_epochs):
+        total_accuracy = 0
+        for image, label in train2_loader:
+            # Fit the image to the device
+            image = image.to(device)
+            # Generate tensor from label
+            label = (
+                torch.zeros(1).float().to(device)
+                if label == 0
+                else torch.ones(1).float().to(device)
+            )
+
+            # Generate the output of the model
+            output = model(image)
+
+            # Compute the accuracy
+            accuracy = accuracy_ce(output, label)
+            total_accuracy += accuracy
+
+            # Calculate the loss with regularization
+            loss = cross_entropy(output, label)
+            loss += regularize(model, regularization)
+
+            # Backpropagation
+            loss.backward()
+
+            # Update the weights
+            optimizer.step()
+
+            # Clear the optimizer gradients
+            optimizer.zero_grad()
+
+            # Print the epoch, iteration, accuracy, and loss
+            print(
+                "<Training 2> Epoch: {} | Loss: {} | Accuracy: {}".format(
+                    epoch, loss.item(), accuracy
+                )
+            )
+
+        # Print the total accuracy and loss
+        print(
+            "FINAL METRICS - <Training 2> Loss: {} | Accuracy: {}".format(
+                loss.item(), total_accuracy / len(train2_loader)
+            )
+        )
