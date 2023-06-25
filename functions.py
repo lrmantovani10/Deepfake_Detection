@@ -22,7 +22,7 @@ base_path = "archive/real_vs_fake/real-vs-fake/"
 new_train_dir = "data/train/"
 new_test_dir = "data/test/"
 new_val_dir = "data/valid/"
-model_filename = "model.pkl"
+model_filename = "detection_model.pkl"
 
 
 # Function to prepare the input to be inserted in the pythorch model
@@ -695,10 +695,11 @@ def phase1_val(
 ):
     # Determine if scheduler steps
     gate_cross = False
+    total_accuracy = 0
     # Validation step -- fine-tuning the learning rate hyperparameter
     for anchor, positive, negative in val1_loader:
         # Calculating the loss
-        loss, image_fs = fit_forward_cffn(
+        _, image_fs = fit_forward_cffn(
             model, anchor, positive, negative, margin, device
         )
 
@@ -719,13 +720,13 @@ def phase1_val(
                 scheduler1.step()
 
         # Print the accuracy and loss
-        print("<Validation 1> Accuracy {} | Loss: {}".format(val1_acc, loss.item()))
+        print("<Validation 1> Accuracy {}".format(val1_acc))
 
     # Print the final metrics
     print("Validation of phase 1 concluded")
     print(
-        "FINAL METRICS - <Training 1> Loss: {} | Accuracy: {}".format(
-            loss.item(), total_accuracy / len(test1_loader)
+        "FINAL METRICS - <Training 1> Accuracy: {}".format(
+            total_accuracy / len(val1_loader)
         )
     )
 
@@ -736,7 +737,7 @@ def phase1_test(model, test1_loader, margin, device):
     total_accuracy = 0
     for anchor, positive, negative in test1_loader:
         # Calculating the loss
-        loss, image_fs = fit_forward_cffn(
+        _, image_fs = fit_forward_cffn(
             model, anchor, positive, negative, margin, device
         )
 
@@ -748,13 +749,13 @@ def phase1_test(model, test1_loader, margin, device):
         total_accuracy += test1_acc
 
         # Print the accuracy and loss
-        print("<Testing 1> Accuracy {} | Loss: {}".format(test1_acc, loss.item()))
+        print("<Testing 1> Accuracy {}".format(test1_acc))
 
     # Print the final metrics
     print("Testing of phase 1 concluded")
     print(
-        "FINAL METRICS - <Training 1> Loss: {} | Accuracy: {}".format(
-            loss.item(), total_accuracy / len(test1_loader)
+        "FINAL METRICS - <Training 1> Accuracy: {}".format(
+            total_accuracy / len(test1_loader)
         )
     )
 
@@ -829,8 +830,95 @@ def phase2_train(
             )
 
         # Print the total accuracy and loss
+        print("Epoch {} concluded".format(epoch))
         print(
             "FINAL METRICS - <Training 2> Loss: {} | Accuracy: {}".format(
                 loss.item(), total_accuracy / len(train2_loader)
             )
         )
+
+
+# Phase 2 validation
+def phase2_val(
+    model,
+    val2_loader,
+    optimizer,
+    device,
+    scheduler2,
+):
+    # Determine if scheduler steps
+    gate_cross = False
+    total_accuracy = 0
+    # Validation step -- fine-tuning the learning rate hyperparameter
+    for image, label in val2_loader:
+        # Fit the image to the device
+        image = image.to(device)
+        # Generate tensor from label
+        label = (
+            torch.zeros(1).float().to(device)
+            if label == 0
+            else torch.ones(1).float().to(device)
+        )
+
+        # Generate the output of the model
+        output = model(image)
+
+        # Compute the accuracy
+        accuracy = accuracy_ce(output, label)
+        total_accuracy += accuracy
+
+        # Scheduler step
+        if accuracy >= 0.9:
+            # Determine if scheduler makes its long awaited step
+            if not gate_cross:
+                scheduler2.step()
+                scheduler2 = StepLR(optimizer, step_size=8, gamma=0.1)
+                gate_cross = True
+            else:
+                scheduler2.step()
+
+        # Print the accuracy and loss
+        print("<Validation 2> Accuracy {} ".format(accuracy))
+
+    # Print the final metrics
+    print("Validation of phase 2 concluded")
+    print(
+        "FINAL METRIC - <Validating 2> Accuracy: {}".format(
+            total_accuracy / len(val2_loader)
+        )
+    )
+
+# Phase 2 testing
+def phase2_test(model, test2_loader, device):
+    # Testing Step -- monitoring accuracy and loss
+    total_accuracy = 0
+    for image, label in test2_loader:
+        # Fit the image to the device
+        image = image.to(device)
+        # Generate tensor from label
+        label = (
+            torch.zeros(1).float().to(device)
+            if label == 0
+            else torch.ones(1).float().to(device)
+        )
+
+        # Generate the output of the model
+        output = model(image)
+
+        # Compute the accuracy
+        accuracy = accuracy_ce(output, label)
+        total_accuracy += accuracy
+
+        # Print the accuracy and loss
+        print("<Testing 2> Accuracy {}".format(accuracy))
+
+    # Print the final metrics
+    print("Testing of phase 2 concluded")
+    print(
+        "FINAL METRIC - <Testing 2> Accuracy: {}".format(
+            total_accuracy / len(test2_loader)
+        )
+    )
+
+    # Save the model
+    # torch.save(model.state_dict(), "phase2_model.pt")
