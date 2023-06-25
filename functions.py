@@ -14,7 +14,6 @@ import matplotlib.pylab as plt
 import torch.nn as nn
 from torch.optim.lr_scheduler import StepLR
 from torchvision.transforms import transforms
-from torchvision.datasets import ImageFolder
 from torch.utils.data import DataLoader, Dataset
 
 # Project settings
@@ -22,7 +21,8 @@ base_path = "archive/real_vs_fake/real-vs-fake/"
 new_train_dir = "data/train/"
 new_test_dir = "data/test/"
 new_val_dir = "data/valid/"
-model_filename = "detection_model.pkl"
+model_filename = "data/detection_model.pkl"
+weights_filename = "data/detection_model_weights.h5"
 
 
 # Function to prepare the input to be inserted in the pythorch model
@@ -574,7 +574,6 @@ def euclidean_distance(t1, t2):
 def compute_distance_matrix(a, p, n):
     distance_matrix = torch.zeros(a.size(0), 3)
     d1 = euclidean_distance(a, a)
-    print(a.shape, d1.shape)
     distance_matrix[:, 0] = euclidean_distance(a, a)
     distance_matrix[:, 1] = euclidean_distance(a, p)
     distance_matrix[:, 2] = euclidean_distance(a, n)
@@ -636,18 +635,18 @@ def fit_forward_cffn(model, anchor, positive, negative, margin, device):
     return loss, image_fs
 
 
+# Function to save the model's weights
+def save_model(model):
+    torch.save(model.state_dict(), weights_filename)
+
+
 # Phase 1 training
-def phase1_train(
-    model,
-    train1_loader,
-    optimizer,
-    margin,
-    device,
-    p1_epochs,
-):
+def phase1_train(model, train1_loader, optimizer, margin, device, p1_epochs, scheduler):
     for epoch in range(p1_epochs):
+        # Total accuracy and scheduler gating
         total_accuracy = 0
-        for anchor, positive, negative in train1_loader:
+        gate_cross = False
+        for index, (anchor, positive, negative) in enumerate(train1_loader):
             # Calculating the loss
             loss, image_fs = fit_forward_cffn(
                 model, anchor, positive, negative, margin, device
@@ -658,6 +657,7 @@ def phase1_train(
 
             # Computing train accuracy for phase 1
             train1_acc = triplet_accuracy(anchor, positive, negative, margin)
+            total_accuracy += train1_acc
 
             # Backpropagation
             loss.backward()
@@ -668,6 +668,20 @@ def phase1_train(
             # Clear the optimizer gradients
             optimizer.zero_grad()
 
+            # Scheduler step
+            if train1_acc >= 0.9:
+                # Determine if scheduler makes its long awaited step
+                if not gate_cross:
+                    scheduler.step()
+                    scheduler = StepLR(optimizer, step_size=8, gamma=0.1)
+                    gate_cross = True
+                else:
+                    scheduler.step()
+
+            # Save the model weights at every 5 epochs
+            if index % 5 == 0:
+                save_model(model)
+
             # Print the epoch, iteration, accuracy, and loss
             print(
                 "<Training 1> Epoch: {} |  Accuracy: {} | Loss: {}".format(
@@ -676,29 +690,29 @@ def phase1_train(
             )
 
         # Print the final metrics
-        print("Epoch {} concluded".format(epoch))
+        print("Training of phase 1 concluded.".format(epoch))
         print(
             "FINAL METRICS - <Training 1> Loss: {} | Accuracy: {}".format(
                 loss.item(), total_accuracy / len(train1_loader)
             )
         )
 
+        # Save the model weights
+        save_model(model)
+
 
 # Phase 1 validation
 def phase1_val(
     model,
     val1_loader,
-    optimizer,
     margin,
     device,
-    scheduler1,
 ):
-    # Determine if scheduler steps
-    gate_cross = False
+    # Aggregate accuracy
     total_accuracy = 0
     # Validation step -- fine-tuning the learning rate hyperparameter
     for anchor, positive, negative in val1_loader:
-        # Calculating the loss
+        # Forward propagation
         _, image_fs = fit_forward_cffn(
             model, anchor, positive, negative, margin, device
         )
@@ -708,24 +722,15 @@ def phase1_val(
 
         # Calculate the accuracy
         val1_acc = triplet_accuracy(anchor, positive, negative, margin)
-
-        # Scheduler step
-        if val1_acc >= 0.9:
-            # Determine if scheduler makes its long awaited step
-            if not gate_cross:
-                scheduler1.step()
-                scheduler1 = StepLR(optimizer, step_size=8, gamma=0.1)
-                gate_cross = True
-            else:
-                scheduler1.step()
+        total_accuracy += val1_acc
 
         # Print the accuracy and loss
         print("<Validation 1> Accuracy {}".format(val1_acc))
 
     # Print the final metrics
-    print("Validation of phase 1 concluded")
+    print("Validation of phase 1 concluded.")
     print(
-        "FINAL METRICS - <Training 1> Accuracy: {}".format(
+        "FINAL METRIC - <Validation 1> Accuracy: {}".format(
             total_accuracy / len(val1_loader)
         )
     )
@@ -736,7 +741,7 @@ def phase1_test(model, test1_loader, margin, device):
     # Testing Step -- monitoring accuracy and loss
     total_accuracy = 0
     for anchor, positive, negative in test1_loader:
-        # Calculating the loss
+        # Forward propagation
         _, image_fs = fit_forward_cffn(
             model, anchor, positive, negative, margin, device
         )
@@ -752,15 +757,12 @@ def phase1_test(model, test1_loader, margin, device):
         print("<Testing 1> Accuracy {}".format(test1_acc))
 
     # Print the final metrics
-    print("Testing of phase 1 concluded")
+    print("Testing of phase 1 concluded.")
     print(
-        "FINAL METRICS - <Training 1> Accuracy: {}".format(
+        "FINAL METRIC - <Testing 1> Accuracy: {}".format(
             total_accuracy / len(test1_loader)
         )
     )
-
-    # Save the model
-    # torch.save(model.state_dict(), "phase1_model.pt")
 
 
 # Regularization function
@@ -787,12 +789,21 @@ def accuracy_ce(output, label):
 
 # phase 2 training
 def phase2_train(
-    model, train2_loader, optimizer, cross_entropy, device, p2_epochs, regularization
+    model,
+    train2_loader,
+    optimizer,
+    cross_entropy,
+    device,
+    p2_epochs,
+    regularization,
+    scheduler,
 ):
     # Training step
     for epoch in range(p2_epochs):
+        # Aggregate accuracy and step gate
         total_accuracy = 0
-        for image, label in train2_loader:
+        gate_cross = False
+        for index, (image, label) in enumerate(train2_loader):
             # Fit the image to the device
             image = image.to(device)
             # Generate tensor from label
@@ -822,6 +833,16 @@ def phase2_train(
             # Clear the optimizer gradients
             optimizer.zero_grad()
 
+            # Scheduler step
+            if accuracy >= 0.9:
+                # Determine if scheduler makes its long awaited step
+                if not gate_cross:
+                    scheduler.step()
+                    scheduler = StepLR(optimizer, step_size=8, gamma=0.1)
+                    gate_cross = True
+                else:
+                    scheduler.step()
+
             # Print the epoch, iteration, accuracy, and loss
             print(
                 "<Training 2> Epoch: {} | Loss: {} | Accuracy: {}".format(
@@ -829,25 +850,29 @@ def phase2_train(
                 )
             )
 
+            # Save the model weights at every 5 epochs
+            if index % 5 == 0:
+                save_model(model)
+
         # Print the total accuracy and loss
-        print("Epoch {} concluded".format(epoch))
+        print("Training of phase 2 concluded.".format(epoch))
         print(
             "FINAL METRICS - <Training 2> Loss: {} | Accuracy: {}".format(
                 loss.item(), total_accuracy / len(train2_loader)
             )
         )
 
+        # Save the model weights
+        save_model(model)
+
 
 # Phase 2 validation
 def phase2_val(
     model,
     val2_loader,
-    optimizer,
     device,
-    scheduler2,
 ):
-    # Determine if scheduler steps
-    gate_cross = False
+    # Aggregate accuracy
     total_accuracy = 0
     # Validation step -- fine-tuning the learning rate hyperparameter
     for image, label in val2_loader:
@@ -867,26 +892,17 @@ def phase2_val(
         accuracy = accuracy_ce(output, label)
         total_accuracy += accuracy
 
-        # Scheduler step
-        if accuracy >= 0.9:
-            # Determine if scheduler makes its long awaited step
-            if not gate_cross:
-                scheduler2.step()
-                scheduler2 = StepLR(optimizer, step_size=8, gamma=0.1)
-                gate_cross = True
-            else:
-                scheduler2.step()
-
         # Print the accuracy and loss
         print("<Validation 2> Accuracy {} ".format(accuracy))
 
     # Print the final metrics
-    print("Validation of phase 2 concluded")
+    print("Validation of phase 2 concluded.")
     print(
-        "FINAL METRIC - <Validating 2> Accuracy: {}".format(
+        "FINAL METRIC - <Validation 2> Accuracy: {}".format(
             total_accuracy / len(val2_loader)
         )
     )
+
 
 # Phase 2 testing
 def phase2_test(model, test2_loader, device):
@@ -913,12 +929,9 @@ def phase2_test(model, test2_loader, device):
         print("<Testing 2> Accuracy {}".format(accuracy))
 
     # Print the final metrics
-    print("Testing of phase 2 concluded")
+    print("Testing of phase 2 concluded.")
     print(
         "FINAL METRIC - <Testing 2> Accuracy: {}".format(
             total_accuracy / len(test2_loader)
         )
     )
-
-    # Save the model
-    # torch.save(model.state_dict(), "phase2_model.pt")

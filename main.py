@@ -3,17 +3,15 @@ from functions import *
 
 # Running the code
 if __name__ == "__main__":
-    # Checking if the model is saved
-    if os.path.exists(model_filename):
-        # Load the model
-        model = pk.load(open(model_filename, "rb"))
-        print("Model loaded")
-    else:
-        # Generate the model
-        model = generate_model()
-        # Save the model
-        pk.dump(model, open(model_filename, "wb"))
-        print("Model saved")
+    # Generate the model
+    model = generate_model()
+    print("Model architecture generated!")
+
+    # Checking if the model weights are saved
+    if os.path.exists(weights_filename):
+        # Load the model weights
+        model.load_state_dict(torch.load(weights_filename))
+        print("Model weights loaded")
 
     # Specifying the device type
     if torch.cuda.is_available():
@@ -110,48 +108,39 @@ if __name__ == "__main__":
 
     print("data loaders generated!")
 
-    # # Phase 1 training
-    # phase1_train(
-    #     model,
-    #     train1_loader,
-    #     optimizer,
-    #     margin,
-    #     device,
-    #     p1_epochs
-    # )
+    # Phase 1 training
+    phase1_train(model, train1_loader, optimizer, margin, device, p1_epochs, scheduler1)
 
-    # # Phase 1 validation
-    # phase1_val(
-    #     model,
-    #     val1_loader,
-    #     optimizer,
-    #     margin,
-    #     device,
-    #     scheduler1
-    # )
+    # Phase 1 validation
+    phase1_val(
+        model,
+        val1_loader,
+        margin,
+        device,
+    )
 
-    # # Phase 1 testing
-    # phase1_test(model, test1_loader, margin, device)
+    # Phase 1 testing
+    phase1_test(model, test1_loader, margin, device)
 
-    # # Phase 2 training
-    # phase2_train(
-    #     model,
-    #     train2_loader,
-    #     optimizer,
-    #     cross_entropy_loss,
-    #     device,
-    #     p2_epochs,
-    #     regularization,
-    # )
+    # Phase 2 training
+    phase2_train(
+        model,
+        train2_loader,
+        optimizer,
+        cross_entropy_loss,
+        device,
+        p2_epochs,
+        regularization,
+        optimizer,
+        scheduler2,
+    )
 
     # Phase 2 validation
-    # phase2_val(
-    #     model,
-    #     val2_loader,
-    #     optimizer,
-    #     device,
-    #     scheduler2,
-    # )
+    phase2_val(
+        model,
+        val2_loader,
+        device,
+    )
 
     # Phase 2 testing
     phase2_test(model, test2_loader, device)
