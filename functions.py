@@ -740,6 +740,9 @@ def phase1_train(
                     margin,
                     device,
                 )
+                choice = input("Continue training? (y/n): ")
+                if choice != "y":
+                    return
 
             # Calculating the loss
             loss, image_fs = fit_forward_cffn(
@@ -909,6 +912,9 @@ def phase2_train(
             # Determining if validation should be done now
             if (index + 1) == epoch_threshold:
                 phase2_val(model, val2_loader, device)
+                choice = input("Continue training? (y/n): ")
+                if choice != "y":
+                    return
             # Fit the image to the device
             image = image.to(device)
             # Generate tensor from label
