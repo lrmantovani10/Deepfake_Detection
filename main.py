@@ -27,7 +27,7 @@ if __name__ == "__main__":
     # Hyperparameters
     p1_epochs = 5
     p2_epochs = 15
-    batch_size = 64
+    batch_size = 128
     regularization = 0.001
     margin = 0.8
     lr = 0.0001
@@ -109,14 +109,15 @@ if __name__ == "__main__":
     print("data loaders generated!")
 
     # Phase 1 training
-    phase1_train(model, train1_loader, optimizer, margin, device, p1_epochs, scheduler1)
-
-    # Phase 1 validation
-    phase1_val(
+    phase1_train(
         model,
-        val1_loader,
+        train1_loader,
+        optimizer,
         margin,
         device,
+        p1_epochs,
+        scheduler1,
+        val1_loader,
     )
 
     # Phase 1 testing
@@ -132,13 +133,7 @@ if __name__ == "__main__":
         p2_epochs,
         regularization,
         scheduler2,
-    )
-
-    # Phase 2 validation
-    phase2_val(
-        model,
         val2_loader,
-        device,
     )
 
     # Phase 2 testing

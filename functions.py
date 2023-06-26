@@ -684,14 +684,63 @@ def classifier_metrics(output, label):
     return tp, fp, fn
 
 
+# Phase 1 validation
+def phase1_val(
+    model,
+    val1_loader,
+    margin,
+    device,
+):
+    # Aggregate metrics
+    total_accuracy = 0
+    # Validation step -- fine-tuning the learning rate hyperparameter
+    for anchor, positive, negative in val1_loader:
+        # Forward propagation
+        _, image_fs = fit_forward_cffn(
+            model, anchor, positive, negative, margin, device
+        )
+
+        # Obtaining the anchor, positive, and negative outputs
+        anchor, positive, negative = image_fs
+
+        # Calculate the accuracy
+        val1_acc = triplet_accuracy(anchor, positive, negative, margin)
+        total_accuracy += val1_acc
+
+        # Printing the metrics
+        print("""<Validation 1> Accuracy: {} """.format(val1_acc))
+
+    # Print the final metrics
+    print("Validation of phase 1 concluded.")
+    print(
+        "FINAL METRICS - <Validation 1> Accuracy: {}".format(
+            total_accuracy / len(val1_loader)
+        )
+    )
+
+
 # Phase 1 training
-def phase1_train(model, train1_loader, optimizer, margin, device, p1_epochs, scheduler):
+def phase1_train(
+    model, train1_loader, optimizer, margin, device, p1_epochs, scheduler, val1_loader
+):
+    # Separation between training and validation sets
+    split = len(train1_loader) // p1_epochs
     for epoch in range(p1_epochs):
         # Aggregate metrics
         total_accuracy = 0
         # Scheduler gating
         gate_cross = False
+        epoch_threshold = split * (epoch + 1)
         for index, (anchor, positive, negative) in enumerate(train1_loader):
+            # Determining if validation should be done now
+            if (index + 1) == epoch_threshold:
+                phase1_val(
+                    model,
+                    val1_loader,
+                    margin,
+                    device,
+                )
+
             # Calculating the loss
             loss, image_fs = fit_forward_cffn(
                 model, anchor, positive, negative, margin, device
@@ -746,41 +795,6 @@ def phase1_train(model, train1_loader, optimizer, margin, device, p1_epochs, sch
         save_model(model)
 
 
-# Phase 1 validation
-def phase1_val(
-    model,
-    val1_loader,
-    margin,
-    device,
-):
-    # Aggregate metrics
-    total_accuracy = 0
-    # Validation step -- fine-tuning the learning rate hyperparameter
-    for anchor, positive, negative in val1_loader:
-        # Forward propagation
-        _, image_fs = fit_forward_cffn(
-            model, anchor, positive, negative, margin, device
-        )
-
-        # Obtaining the anchor, positive, and negative outputs
-        anchor, positive, negative = image_fs
-
-        # Calculate the accuracy
-        val1_acc = triplet_accuracy(anchor, positive, negative, margin)
-        total_accuracy += val1_acc
-
-        # Printing the metrics
-        print("""<Validation 1> Accuracy: {} """.format(val1_acc))
-
-    # Print the final metrics
-    print("Validation of phase 1 concluded.")
-    print(
-        "FINAL METRICS - <Validation 1> Accuracy: {}".format(
-            total_accuracy / len(val1_loader)
-        )
-    )
-
-
 # Phase 1 testing
 def phase1_test(model, test1_loader, margin, device):
     # Testing Step -- monitoring metrics
@@ -810,6 +824,63 @@ def phase1_test(model, test1_loader, margin, device):
     )
 
 
+# Phase 2 validation
+def phase2_val(
+    model,
+    val2_loader,
+    device,
+):
+    # Aggregate metrics
+    total_accuracy = 0
+    total_tp = 0
+    total_fp = 0
+    total_fn = 0
+    # Validation step -- fine-tuning the learning rate hyperparameter
+    for image, label in val2_loader:
+        # Fit the image to the device
+        image = image.to(device)
+        # Generate tensor from label
+        label = (
+            torch.zeros(1).float().to(device)
+            if label == 0
+            else torch.ones(1).float().to(device)
+        )
+
+        # Generate the output of the model
+        output = model(image)
+
+        # Compute the accuracy
+        accuracy = accuracy_ce(output, label)
+        total_accuracy += accuracy
+
+        # Computing the true positives, false positives, and false negatives
+        tp, fp, fn = classifier_metrics(output, label)
+
+        # Adding to the total true positives, false positives, and false negatives
+        total_tp += tp
+        total_fp += fp
+        total_fn += fn
+
+        # Calculating the F-score
+        precision, recall, f_val = p_metrics(tp, fp, fn)
+
+        # Printing the relevant metrics
+        print(
+            """<Validation 2> Accuracy: {} | F1: {} | Precision: {} | Recall: {}""".format(
+                accuracy, f_val, precision, recall
+            )
+        )
+
+    # Printing the final metrics
+    print("Validation of phase 2 concluded.")
+    precision, recall, f_val = p_metrics(total_tp, total_fp, total_fn)
+    print(
+        """FINAL METRICS - <Validation 2> Accuracy: {} | Precision: {} | Recall: {} | F1: {}""".format(
+            total_accuracy / len(val2_loader), precision, recall, f_val
+        )
+    )
+
+
 # phase 2 training
 def phase2_train(
     model,
@@ -820,7 +891,10 @@ def phase2_train(
     p2_epochs,
     regularization,
     scheduler,
+    val2_loader,
 ):
+    # Separation between training and validation sets
+    split = len(train2_loader) // p2_epochs
     # Training step
     for epoch in range(p2_epochs):
         # Aggregate metrics
@@ -830,7 +904,11 @@ def phase2_train(
         total_fn = 0
         # Scheduler step
         gate_cross = False
+        epoch_threshold = split * (epoch + 1)
         for index, (image, label) in enumerate(train2_loader):
+            # Determining if validation should be done now
+            if (index + 1) == epoch_threshold:
+                phase2_val(model, val2_loader, device)
             # Fit the image to the device
             image = image.to(device)
             # Generate tensor from label
@@ -903,63 +981,6 @@ def phase2_train(
 
         # Save the model weights
         save_model(model)
-
-
-# Phase 2 validation
-def phase2_val(
-    model,
-    val2_loader,
-    device,
-):
-    # Aggregate metrics
-    total_accuracy = 0
-    total_tp = 0
-    total_fp = 0
-    total_fn = 0
-    # Validation step -- fine-tuning the learning rate hyperparameter
-    for image, label in val2_loader:
-        # Fit the image to the device
-        image = image.to(device)
-        # Generate tensor from label
-        label = (
-            torch.zeros(1).float().to(device)
-            if label == 0
-            else torch.ones(1).float().to(device)
-        )
-
-        # Generate the output of the model
-        output = model(image)
-
-        # Compute the accuracy
-        accuracy = accuracy_ce(output, label)
-        total_accuracy += accuracy
-
-        # Computing the true positives, false positives, and false negatives
-        tp, fp, fn = classifier_metrics(output, label)
-
-        # Adding to the total true positives, false positives, and false negatives
-        total_tp += tp
-        total_fp += fp
-        total_fn += fn
-
-        # Calculating the F-score
-        precision, recall, f_val = p_metrics(tp, fp, fn)
-
-        # Printing the relevant metrics
-        print(
-            """<Validation 2> Accuracy: {} | F1: {} | Precision: {} | Recall: {}""".format(
-                accuracy, f_val, precision, recall
-            )
-        )
-
-    # Printing the final metrics
-    print("Validation of phase 2 concluded.")
-    precision, recall, f_val = p_metrics(total_tp, total_fp, total_fn)
-    print(
-        """FINAL METRICS - <Validation 2> Accuracy: {} | Precision: {} | Recall: {} | F1: {}""".format(
-            total_accuracy / len(val2_loader), precision, recall, f_val
-        )
-    )
 
 
 # Phase 2 testing
