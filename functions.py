@@ -571,7 +571,6 @@ def euclidean_distance(t1, t2):
 # anchor, positive, and negative samples
 def compute_distance_matrix(a, p, n):
     distance_matrix = torch.zeros(a.size(0), 3)
-    d1 = euclidean_distance(a, a)
     distance_matrix[:, 0] = euclidean_distance(a, a)
     distance_matrix[:, 1] = euclidean_distance(a, p)
     distance_matrix[:, 2] = euclidean_distance(a, n)
@@ -592,26 +591,6 @@ def batch_hard_triplet_loss(samples, margin=1):
         distance_matrix[:, 0][hard_negative] - distance_matrix[:, 2] + margin,
     )
     return torch.mean(loss)
-
-
-# Function to calculate the accuracy of triplet loss for a certain batch size
-def triplet_accuracy(anchor, positive, negative, margin=1):
-    # Compute the distance matrix
-    distance_matrix = compute_distance_matrix(anchor, positive, negative)
-
-    # Obtain the distance of anchor-positive and anchor-negative pairs
-    anchor_positive_distance = distance_matrix[:, 1]
-    anchor_negative_distance = distance_matrix[:, 2]
-
-    # Check if the distances satisfy the margin condition
-    correct_triplets = torch.logical_and(
-        anchor_positive_distance < anchor_negative_distance,
-        anchor_positive_distance - anchor_negative_distance < margin,
-    )
-
-    # Calculate the accuracy
-    accuracy = torch.sum(correct_triplets).item() / anchor.size(0)
-    return accuracy
 
 
 # Function to fit images to device and generate the output of the model
@@ -638,11 +617,79 @@ def save_model(model):
     torch.save(model.state_dict(), weights_filename)
 
 
+# Function to calculate the accuracy of triplet loss for a certain batch size
+def triplet_accuracy(anchor, positive, negative, margin=1):
+    # Compute the distance matrix
+    distance_matrix = compute_distance_matrix(anchor, positive, negative)
+
+    # Obtain the distance of anchor-positive and anchor-negative pairs
+    anchor_positive_distance = distance_matrix[:, 1]
+    anchor_negative_distance = distance_matrix[:, 2]
+
+    # Check if the distances satisfy the margin condition
+    correct_triplets = torch.logical_and(
+        anchor_positive_distance < anchor_negative_distance,
+        anchor_positive_distance - anchor_negative_distance < margin,
+    )
+
+    # Calculate the accuracy
+    accuracy = torch.sum(correct_triplets).item() / anchor.size(0)
+    return accuracy
+
+
+# Regularization function
+def regularize(model, regularization):
+    regularization_term = 0
+    for param in model.parameters():
+        # Adding L2 Norm to running sum
+        regularization_term += torch.norm(param)
+
+    # Multiplying by the regularization term
+    return regularization * regularization_term
+
+
+# Function to compute the accuracy of the binary classifier
+def accuracy_ce(output, label):
+    # Compute the accuracy
+    accuracy = torch.sum(
+        # Check if the output is greater than 0.5
+        torch.round(output)
+        == label
+    ).item() / output.size(0)
+    return accuracy
+
+
+# F-score calculation
+def p_metrics(tp, fp, fn):
+    precision = tp / (tp + fp)
+    recall = tp / (tp + fn)
+    return precision, recall, 2 * precision * recall / (precision + recall)
+
+
+# Computing the true positives, false positives, and false negatives
+# for the binary classifier
+def classifier_metrics(output, label):
+    # True positives
+    tp = torch.sum(
+        torch.round(output) == label and label == torch.ones(1).float()
+    ).item()
+    # False positives
+    fp = torch.sum(
+        torch.round(output) != label and label == torch.zeros(1).float()
+    ).item()
+    # False negatives
+    fn = torch.sum(
+        torch.round(output) != label and label == torch.ones(1).float()
+    ).item()
+    return tp, fp, fn
+
+
 # Phase 1 training
 def phase1_train(model, train1_loader, optimizer, margin, device, p1_epochs, scheduler):
     for epoch in range(p1_epochs):
-        # Total accuracy and scheduler gating
+        # Aggregate metrics
         total_accuracy = 0
+        # Scheduler gating
         gate_cross = False
         for index, (anchor, positive, negative) in enumerate(train1_loader):
             # Calculating the loss
@@ -680,9 +727,9 @@ def phase1_train(model, train1_loader, optimizer, margin, device, p1_epochs, sch
             if index % 5 == 0:
                 save_model(model)
 
-            # Print the epoch, iteration, accuracy, and loss
+            # Print the metrics
             print(
-                "<Training 1> Epoch: {} |  Accuracy: {} | Loss: {}".format(
+                """<Training 1> Epoch: {} |  Accuracy: {}  Loss: {}""".format(
                     epoch, train1_acc, loss.item()
                 )
             )
@@ -690,7 +737,7 @@ def phase1_train(model, train1_loader, optimizer, margin, device, p1_epochs, sch
         # Print the final metrics
         print("Training of phase 1 concluded.".format(epoch))
         print(
-            "FINAL METRICS - <Training 1> Loss: {} | Accuracy: {}".format(
+            """FINAL METRICS - <Training 1> Loss: {} | Accuracy: {} """.format(
                 loss.item(), total_accuracy / len(train1_loader)
             )
         )
@@ -706,7 +753,7 @@ def phase1_val(
     margin,
     device,
 ):
-    # Aggregate accuracy
+    # Aggregate metrics
     total_accuracy = 0
     # Validation step -- fine-tuning the learning rate hyperparameter
     for anchor, positive, negative in val1_loader:
@@ -722,13 +769,13 @@ def phase1_val(
         val1_acc = triplet_accuracy(anchor, positive, negative, margin)
         total_accuracy += val1_acc
 
-        # Print the accuracy and loss
-        print("<Validation 1> Accuracy {}".format(val1_acc))
+        # Printing the metrics
+        print("""<Validation 1> Accuracy: {} """.format(val1_acc))
 
     # Print the final metrics
     print("Validation of phase 1 concluded.")
     print(
-        "FINAL METRIC - <Validation 1> Accuracy: {}".format(
+        "FINAL METRICS - <Validation 1> Accuracy: {}".format(
             total_accuracy / len(val1_loader)
         )
     )
@@ -736,7 +783,7 @@ def phase1_val(
 
 # Phase 1 testing
 def phase1_test(model, test1_loader, margin, device):
-    # Testing Step -- monitoring accuracy and loss
+    # Testing Step -- monitoring metrics
     total_accuracy = 0
     for anchor, positive, negative in test1_loader:
         # Forward propagation
@@ -751,38 +798,16 @@ def phase1_test(model, test1_loader, margin, device):
         test1_acc = triplet_accuracy(anchor, positive, negative, margin)
         total_accuracy += test1_acc
 
-        # Print the accuracy and loss
-        print("<Testing 1> Accuracy {}".format(test1_acc))
+        # Print the relevant metrics
+        print("""<Testing 1> Accuracy: {} """.format(test1_acc))
 
     # Print the final metrics
     print("Testing of phase 1 concluded.")
     print(
-        "FINAL METRIC - <Testing 1> Accuracy: {}".format(
+        """FINAL METRICS - <Testing 1> Accuracy: {}""".format(
             total_accuracy / len(test1_loader)
         )
     )
-
-
-# Regularization function
-def regularize(model, regularization):
-    regularization_term = 0
-    for param in model.parameters():
-        # Adding L2 Norm to running sum
-        regularization_term += torch.norm(param)
-
-    # Multiplying by the regularization term
-    return regularization * regularization_term
-
-
-# Function to compute the accuracy of the model
-def accuracy_ce(output, label):
-    # Compute the accuracy
-    accuracy = torch.sum(
-        # Check if the output is greater than 0.5
-        torch.round(output)
-        == label
-    ).item() / output.size(0)
-    return accuracy
 
 
 # phase 2 training
@@ -798,8 +823,12 @@ def phase2_train(
 ):
     # Training step
     for epoch in range(p2_epochs):
-        # Aggregate accuracy and step gate
+        # Aggregate metrics
         total_accuracy = 0
+        total_tp = 0
+        total_fp = 0
+        total_fn = 0
+        # Scheduler step
         gate_cross = False
         for index, (image, label) in enumerate(train2_loader):
             # Fit the image to the device
@@ -817,6 +846,17 @@ def phase2_train(
             # Compute the accuracy
             accuracy = accuracy_ce(output, label)
             total_accuracy += accuracy
+
+            # Computing the true positives, false positives, and false negatives
+            tp, fp, fn = classifier_metrics(output, label)
+
+            # Adding to the total true positives, false positives, and false negatives
+            total_tp += tp
+            total_fp += fp
+            total_fn += fn
+
+            # Calculating the F-score
+            precision, recall, f_val = p_metrics(tp, fp, fn)
 
             # Calculate the loss with regularization
             loss = cross_entropy(output, label)
@@ -841,10 +881,10 @@ def phase2_train(
                 else:
                     scheduler.step()
 
-            # Print the epoch, iteration, accuracy, and loss
+            # Print the relevant metrics
             print(
-                "<Training 2> Epoch: {} | Loss: {} | Accuracy: {}".format(
-                    epoch, loss.item(), accuracy
+                """<Training 2> Epoch: {} | Accuracy: {} | F1: {} | Precision: {} | Recall: {}""".format(
+                    epoch, accuracy, f_val, precision, recall
                 )
             )
 
@@ -852,11 +892,12 @@ def phase2_train(
             if index % 5 == 0:
                 save_model(model)
 
-        # Print the total accuracy and loss
-        print("Training of phase 2 concluded.".format(epoch))
+        # Print the final metrics
+        print("Training of phase 2 concluded.")
+        precision, recall, f_val = p_metrics(total_tp, total_fp, total_fn)
         print(
-            "FINAL METRICS - <Training 2> Loss: {} | Accuracy: {}".format(
-                loss.item(), total_accuracy / len(train2_loader)
+            """FINAL METRICS - <Training 2> Epoch: {} | Accuracy: {} | Precision: {} | Recall: {} | F1: {}""".format(
+                epoch, total_accuracy / len(train2_loader), precision, recall, f_val
             )
         )
 
@@ -870,8 +911,11 @@ def phase2_val(
     val2_loader,
     device,
 ):
-    # Aggregate accuracy
+    # Aggregate metrics
     total_accuracy = 0
+    total_tp = 0
+    total_fp = 0
+    total_fn = 0
     # Validation step -- fine-tuning the learning rate hyperparameter
     for image, label in val2_loader:
         # Fit the image to the device
@@ -890,22 +934,41 @@ def phase2_val(
         accuracy = accuracy_ce(output, label)
         total_accuracy += accuracy
 
-        # Print the accuracy and loss
-        print("<Validation 2> Accuracy {} ".format(accuracy))
+        # Computing the true positives, false positives, and false negatives
+        tp, fp, fn = classifier_metrics(output, label)
 
-    # Print the final metrics
+        # Adding to the total true positives, false positives, and false negatives
+        total_tp += tp
+        total_fp += fp
+        total_fn += fn
+
+        # Calculating the F-score
+        precision, recall, f_val = p_metrics(tp, fp, fn)
+
+        # Printing the relevant metrics
+        print(
+            """<Validation 2> Accuracy: {} | F1: {} | Precision: {} | Recall: {}""".format(
+                accuracy, f_val, precision, recall
+            )
+        )
+
+    # Printing the final metrics
     print("Validation of phase 2 concluded.")
+    precision, recall, f_val = p_metrics(total_tp, total_fp, total_fn)
     print(
-        "FINAL METRIC - <Validation 2> Accuracy: {}".format(
-            total_accuracy / len(val2_loader)
+        """FINAL METRICS - <Validation 2> Accuracy: {} | Precision: {} | Recall: {} | F1: {}""".format(
+            total_accuracy / len(val2_loader), precision, recall, f_val
         )
     )
 
 
 # Phase 2 testing
 def phase2_test(model, test2_loader, device):
-    # Testing Step -- monitoring accuracy and loss
+    # Relevant metrics
     total_accuracy = 0
+    total_tp = 0
+    total_fp = 0
+    total_fn = 0
     for image, label in test2_loader:
         # Fit the image to the device
         image = image.to(device)
@@ -923,13 +986,29 @@ def phase2_test(model, test2_loader, device):
         accuracy = accuracy_ce(output, label)
         total_accuracy += accuracy
 
-        # Print the accuracy and loss
-        print("<Testing 2> Accuracy {}".format(accuracy))
+        # Computing the true positives, false positives, and false negatives
+        tp, fp, fn = classifier_metrics(output, label)
+
+        # Adding to the total true positives, false positives, and false negatives
+        total_tp += tp
+        total_fp += fp
+        total_fn += fn
+
+        # Calculating the F-score
+        precision, recall, f_val = p_metrics(tp, fp, fn)
+
+        # Printing the relevant metrics
+        print(
+            """<Testing 2> Accuracy: {} | F1: {} | Precision: {} | Recall: {}""".format(
+                accuracy, f_val, precision, recall
+            )
+        )
 
     # Print the final metrics
     print("Testing of phase 2 concluded.")
+    precision, recall, f_val = p_metrics(total_tp, total_fp, total_fn)
     print(
-        "FINAL METRIC - <Testing 2> Accuracy: {}".format(
-            total_accuracy / len(test2_loader)
+        """FINAL METRICS - <Testing 2> Accuracy: {} | Precision: {} | Recall: {} | F1: {}""".format(
+            total_accuracy / len(test2_loader), precision, recall, f_val
         )
     )
