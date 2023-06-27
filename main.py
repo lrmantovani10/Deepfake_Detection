@@ -27,10 +27,10 @@ if __name__ == "__main__":
     # Hyperparameters
     p1_epochs = 5
     p2_epochs = 15
-    batch_size = 128
+    batch_size = 32
     regularization = 0.001
     margin = 0.8
-    lr = 0.0001
+    lr = 0.001
     workers = 2
     offset = 0.2
 
@@ -105,6 +105,9 @@ if __name__ == "__main__":
     val2_loader = DataLoader(
         val2_dataset, batch_size=batch_size, shuffle=True, num_workers=workers
     )
+
+    # Clear the cache
+    torch.cuda.empty_cache()
 
     print("data loaders generated!")
 
