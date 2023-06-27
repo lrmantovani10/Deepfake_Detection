@@ -31,7 +31,7 @@ if __name__ == "__main__":
     regularization = 0.001
     margin = 0.8
     lr = 0.001
-    workers = 2
+    workers = 4
     offset = 0.2
 
     # Defining the optimizer for both phases
