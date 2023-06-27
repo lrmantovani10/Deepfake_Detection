@@ -29,7 +29,7 @@ if __name__ == "__main__":
     p2_epochs = 15
     batch_size = 64
     regularization = 0.001
-    margin = 0.8
+    margin = 1
     lr = 0.001
     workers = 4
     offset = 0.2
