@@ -21,6 +21,7 @@ new_train_dir = "data/train/"
 new_test_dir = "data/test/"
 new_val_dir = "data/valid/"
 weights_filename = "data/detection_model_weights.h5"
+epoch_filename = "data/epoch.txt"
 
 
 # Function to prepare the input to be inserted in the pythorch model
@@ -684,6 +685,30 @@ def classifier_metrics(output, label):
     return tp, fp, fn
 
 
+# Function to save / load a file containing the current
+# ideal epoch threshold
+def check_epoch(total, split):
+    if os.path.exists(epoch_filename):
+        with open(epoch_filename, "r") as f:
+            epoch = int(f.read())
+    else:
+        epoch = 0
+
+    if epoch < 0:
+        epoch = 0
+
+    if epoch == 0:
+        epoch = total - split
+        with open(epoch_filename, "w") as f:
+            f.write(str(epoch))
+
+    else:
+        with open(epoch_filename, "w") as f:
+            f.write(str(epoch - split))
+
+    return epoch
+
+
 # Phase 1 validation
 def phase1_val(
     model,
@@ -730,10 +755,11 @@ def phase1_train(
         total_accuracy = 0
         # Scheduler gating
         gate_cross = False
-        epoch_threshold = split * (epoch + 1)
+        epoch_threshold = check_epoch(p1_epochs, split)
         for index, (anchor, positive, negative) in enumerate(train1_loader):
             # Determining if validation should be done now
             if (index + 1) == epoch_threshold:
+                save_model(model)
                 phase1_val(
                     model,
                     val1_loader,
@@ -907,10 +933,11 @@ def phase2_train(
         total_fn = 0
         # Scheduler step
         gate_cross = False
-        epoch_threshold = split * (epoch + 1)
+        epoch_threshold = check_epoch(p2_epochs, split)
         for index, (image, label) in enumerate(train2_loader):
             # Determining if validation should be done now
             if (index + 1) == epoch_threshold:
+                save_model(model)
                 phase2_val(model, val2_loader, device)
                 choice = input("Continue training? (y/n): ")
                 if choice != "y":
