@@ -27,7 +27,7 @@ if __name__ == "__main__":
     # Hyperparameters
     p1_epochs = 5
     p2_epochs = 15
-    batch_size = 32
+    batch_size = 64
     regularization = 0.001
     margin = 0.8
     lr = 0.001
@@ -39,10 +39,6 @@ if __name__ == "__main__":
 
     # Scheduler
     scheduler1 = StepLR(optimizer, step_size=1, gamma=0.1)
-    scheduler2 = StepLR(optimizer, step_size=1, gamma=0.1)
-
-    # Cross entropy loss function for phase 2
-    cross_entropy_loss = nn.CrossEntropyLoss()
 
     # Defining the preprocessing transformations
     transform = transforms.Compose([transforms.Lambda(prepare_input)])
@@ -79,11 +75,6 @@ if __name__ == "__main__":
         offset=offset,
     )
 
-    # Generating the datasets for phase 2 using our custom class
-    train2_dataset = Phase2Data(new_train_dir, transform=transform, offset=offset)
-    test2_dataset = Phase2Data(new_test_dir, transform=transform, offset=offset)
-    val2_dataset = Phase2Data(new_val_dir, transform=transform, offset=offset)
-
     # Generating the dataloaders for phase 1
     train1_loader = DataLoader(
         train1_dataset, batch_size=batch_size, shuffle=True, num_workers=workers
@@ -93,17 +84,6 @@ if __name__ == "__main__":
     )
     val1_loader = DataLoader(
         val1_dataset, batch_size=batch_size, shuffle=True, num_workers=workers
-    )
-
-    # Generating the dataloaders for phase 2
-    train2_loader = DataLoader(
-        train2_dataset, batch_size=batch_size, shuffle=True, num_workers=workers
-    )
-    test2_loader = DataLoader(
-        test2_dataset, batch_size=batch_size, shuffle=True, num_workers=workers
-    )
-    val2_loader = DataLoader(
-        val2_dataset, batch_size=batch_size, shuffle=True, num_workers=workers
     )
 
     # Clear the cache
@@ -125,6 +105,28 @@ if __name__ == "__main__":
 
     # Phase 1 testing
     phase1_test(model, test1_loader, margin, device)
+
+    # Scheduler
+    scheduler2 = StepLR(optimizer, step_size=1, gamma=0.1)
+
+    # Cross entropy loss function for phase 2
+    cross_entropy_loss = nn.CrossEntropyLoss()
+
+    # Generating the datasets for phase 2 using our custom class
+    train2_dataset = Phase2Data(new_train_dir, transform=transform, offset=offset)
+    test2_dataset = Phase2Data(new_test_dir, transform=transform, offset=offset)
+    val2_dataset = Phase2Data(new_val_dir, transform=transform, offset=offset)
+
+    # Generating the dataloaders for phase 2
+    train2_loader = DataLoader(
+        train2_dataset, batch_size=batch_size, shuffle=True, num_workers=workers
+    )
+    test2_loader = DataLoader(
+        test2_dataset, batch_size=batch_size, shuffle=True, num_workers=workers
+    )
+    val2_loader = DataLoader(
+        val2_dataset, batch_size=batch_size, shuffle=True, num_workers=workers
+    )
 
     # Phase 2 training
     phase2_train(
