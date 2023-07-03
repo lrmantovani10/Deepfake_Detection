@@ -7,3 +7,12 @@ The file distribution of the project is as follows:
 * functions.py &rarr; file containing the functions necessary for main.py to execute properly. These include function to train, validate, and test the model.
 * main.py &rarr; main file of the program, which determines when certain steps of the program's execution (such as training and testing) will be run.
 * paper.pdf &rarr; reference paper for the model's implementation. Describes the model's architecture, most of which was adopted by this implementation. However, hyperparameters such as batch size and learning rate were modified on my implementation. Furthermore, my preprocessing steps differed entirely from the paper at hand, and instead involved using OpenCV to draw facial landmarks. 
+* unzip.py &rarr; script used to unzip the contents of the "data/" folder, used for training the model in a cloud computing environment where uploading a large number of files is not recommended.
+
+Note: Although I was unable to run the model for all the given epochs due to
+hardware limitations, the combination of the facial landmarks preprocessing step 
+and the high accuracy of the architecture proposed by the referenced paper lead
+me to believe that this is an innovative solution to the problem at hand, explaining
+why initial iterations of training already demonstrated an accuracy of ~80%. I 
+believe that with sufficient training and validation time with the parameters specified by
+the code, this number would rapidly increase to 90%. 
