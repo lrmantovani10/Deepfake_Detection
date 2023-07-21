@@ -27,10 +27,10 @@ if __name__ == "__main__":
     # Hyperparameters
     p1_epochs = 5
     p2_epochs = 15
-    batch_size = 64
+    batch_size = 128
     regularization = 0.001
     margin = 1
-    lr = 0.001
+    lr = 0.0001
     workers = 4
     offset = 0.2
 
