@@ -88,7 +88,6 @@ if __name__ == "__main__":
 
     # Clear the cache
     torch.cuda.empty_cache()
-
     write_to_log("data loaders generated!")
 
     # Phase 1 training
@@ -127,6 +126,8 @@ if __name__ == "__main__":
     val2_loader = DataLoader(
         val2_dataset, batch_size=batch_size, shuffle=True, num_workers=workers
     )
+
+    write_to_log("data loaders generated!")
 
     # Phase 2 training
     phase2_train(
