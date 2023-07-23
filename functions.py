@@ -22,7 +22,12 @@ new_test_dir = "data/test/"
 new_val_dir = "data/valid/"
 weights_filename = "data/detection_model_weights.h5"
 epoch_filename = "data/epoch.txt"
+log_filepath = "data/log.txt"
 
+# Writing to log file
+def write_to_log(text):
+    with open(log_filepath, 'a') as log_file:
+        log_file.write(text + '\n')
 
 # Function to prepare the input to be inserted in the pythorch model
 def prepare_input(img_path):
@@ -243,12 +248,12 @@ def show_metadata(train, test, val):
     plt.show()
 
     # Printing a summary of the data
-    print("Image counts per category")
+    write_to_log("Image counts per category")
     for key, value in label_counts.items():
-        print(f"{key}: {value}")
+        write_to_log(f"{key}: {value}")
 
     # Total counts
-    print(f"Total images: {sum([i for i in label_counts.values()])}")
+    write_to_log(f"Total images: {sum([i for i in label_counts.values()])}")
 
 
 # Defining a function to display images
@@ -274,14 +279,14 @@ def face_locations(file_path, display=False):
     image = mpimg.imread(file_path)
 
     if display:
-        print(f"{len(locations)} face(s) were identified in this photo.")
+        write_to_log(f"{len(locations)} face(s) were identified in this photo.")
         # Identifying face locations in an image
         locations = fr.face_locations(image)
         # Iterating over each face
         for face_location in locations:
             # Print the positions of the face
             up, right, down, left = face_location
-            print(f"Face location up: {up}, left: {left}, down: {down}, right: {right}")
+            write_to_log(f"Face location up: {up}, left: {left}, down: {down}, right: {right}")
 
             # Visualizing the face itself by reading its pixel values
             face_image = image[up:down, left:right]
@@ -303,7 +308,7 @@ def face_locations(file_path, display=False):
         if display:
             # Print the location of each facial feature in this image
             for feature in landmark.keys():
-                print(f"The {feature} of this face is located at {landmark[feature]}")
+                write_to_log(f"The {feature} of this face is located at {landmark[feature]}")
 
         # Using line to sketch facial features
         for feature in landmark.keys():
@@ -733,11 +738,11 @@ def phase1_val(
         total_accuracy += val1_acc
 
         # Printing the metrics
-        print("""<Validation 1> Accuracy: {} """.format(val1_acc))
+        write_to_log("""<Validation 1> Accuracy: {} """.format(val1_acc))
 
     # Print the final metrics
-    print("Validation of phase 1 concluded.")
-    print(
+    write_to_log("Validation of phase 1 concluded.")
+    write_to_log(
         "FINAL METRICS - <Validation 1> Accuracy: {}".format(
             total_accuracy / len(val1_loader)
         )
@@ -804,15 +809,15 @@ def phase1_train(
                 save_model(model)
 
             # Print the metrics
-            print(
+            write_to_log(
                 """<Training 1> Epoch: {} |  Accuracy: {}  Loss: {}""".format(
                     epoch, train1_acc, loss.item()
                 )
             )
 
         # Print the final metrics
-        print("Training of phase 1 concluded.".format(epoch))
-        print(
+        write_to_log("Training of phase 1 concluded.".format(epoch))
+        write_to_log(
             """FINAL METRICS - <Training 1> Loss: {} | Accuracy: {} """.format(
                 loss.item(), total_accuracy / len(train1_loader)
             )
@@ -840,11 +845,11 @@ def phase1_test(model, test1_loader, margin, device):
         total_accuracy += test1_acc
 
         # Print the relevant metrics
-        print("""<Testing 1> Accuracy: {} """.format(test1_acc))
+        write_to_log("""<Testing 1> Accuracy: {} """.format(test1_acc))
 
     # Print the final metrics
-    print("Testing of phase 1 concluded.")
-    print(
+    write_to_log("Testing of phase 1 concluded.")
+    write_to_log(
         """FINAL METRICS - <Testing 1> Accuracy: {}""".format(
             total_accuracy / len(test1_loader)
         )
@@ -892,16 +897,16 @@ def phase2_val(
         precision, recall, f_val = p_metrics(tp, fp, fn)
 
         # Printing the relevant metrics
-        print(
+        write_to_log(
             """<Validation 2> Accuracy: {} | F1: {} | Precision: {} | Recall: {}""".format(
                 accuracy, f_val, precision, recall
             )
         )
 
     # Printing the final metrics
-    print("Validation of phase 2 concluded.")
+    write_to_log("Validation of phase 2 concluded.")
     precision, recall, f_val = p_metrics(total_tp, total_fp, total_fn)
-    print(
+    write_to_log(
         """FINAL METRICS - <Validation 2> Accuracy: {} | Precision: {} | Recall: {} | F1: {}""".format(
             total_accuracy / len(val2_loader), precision, recall, f_val
         )
@@ -990,7 +995,7 @@ def phase2_train(
                     scheduler.step()
 
             # Print the relevant metrics
-            print(
+            write_to_log(
                 """<Training 2> Epoch: {} | Accuracy: {} | F1: {} | Precision: {} | Recall: {}""".format(
                     epoch, accuracy, f_val, precision, recall
                 )
@@ -1001,9 +1006,9 @@ def phase2_train(
                 save_model(model)
 
         # Print the final metrics
-        print("Training of phase 2 concluded.")
+        write_to_log("Training of phase 2 concluded.")
         precision, recall, f_val = p_metrics(total_tp, total_fp, total_fn)
-        print(
+        write_to_log(
             """FINAL METRICS - <Training 2> Epoch: {} | Accuracy: {} | Precision: {} | Recall: {} | F1: {}""".format(
                 epoch, total_accuracy / len(train2_loader), precision, recall, f_val
             )
@@ -1049,16 +1054,16 @@ def phase2_test(model, test2_loader, device):
         precision, recall, f_val = p_metrics(tp, fp, fn)
 
         # Printing the relevant metrics
-        print(
+        write_to_log(
             """<Testing 2> Accuracy: {} | F1: {} | Precision: {} | Recall: {}""".format(
                 accuracy, f_val, precision, recall
             )
         )
 
     # Print the final metrics
-    print("Testing of phase 2 concluded.")
+    write_to_log("Testing of phase 2 concluded.")
     precision, recall, f_val = p_metrics(total_tp, total_fp, total_fn)
-    print(
+    write_to_log(
         """FINAL METRICS - <Testing 2> Accuracy: {} | Precision: {} | Recall: {} | F1: {}""".format(
             total_accuracy / len(test2_loader), precision, recall, f_val
         )

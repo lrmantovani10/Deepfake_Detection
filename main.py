@@ -5,13 +5,13 @@ from functions import *
 if __name__ == "__main__":
     # Generate the model
     model = generate_model()
-    print("Model architecture generated!")
+    write_to_log("Model architecture generated!")
 
     # Checking if the model weights are saved
     if os.path.exists(weights_filename):
         # Load the model weights
         model.load_state_dict(torch.load(weights_filename))
-        print("Model weights loaded")
+        write_to_log("Model weights loaded")
 
     # Specifying the device type
     if torch.cuda.is_available():
@@ -89,7 +89,7 @@ if __name__ == "__main__":
     # Clear the cache
     torch.cuda.empty_cache()
 
-    print("data loaders generated!")
+    write_to_log("data loaders generated!")
 
     # Phase 1 training
     phase1_train(
