@@ -872,11 +872,12 @@ def phase2_val(
         # Fit the image to the device
         image = image.to(device)
         # Generate tensor from label
-        label = (
-            torch.zeros(1).float().to(device)
-            if label == 0
-            else torch.ones(1).float().to(device)
-        )
+        if batch_size == 1:
+            label = (
+                torch.zeros(1).float().to(device)
+                if label == 0
+                else torch.ones(1).float().to(device)
+            )
 
         # Generate the output of the model
         output = model(image)
@@ -946,12 +947,13 @@ def phase2_train(
                 quit()
             # Fit the image to the device
             image = image.to(device)
-            # Generate tensor from label
-            label = (
-                torch.zeros(1).float().to(device)
-                if label == 0
-                else torch.ones(1).float().to(device)
-            )
+            # Generate tensor from label if label is a number
+            if label == 0 or label == 1:
+                label = (
+                    torch.zeros(1).float().to(device)
+                    if label == 0
+                    else torch.ones(1).float().to(device)
+                )
 
             # Generate the output of the model
             output = model(image)
@@ -1028,12 +1030,13 @@ def phase2_test(model, test2_loader, device):
     for image, label in test2_loader:
         # Fit the image to the device
         image = image.to(device)
-        # Generate tensor from label
-        label = (
-            torch.zeros(1).float().to(device)
-            if label == 0
-            else torch.ones(1).float().to(device)
-        )
+        # Generate tensor from label if label is a number
+        if label == 0 or label == 1:
+            label = (
+                torch.zeros(1).float().to(device)
+                if label == 0
+                else torch.ones(1).float().to(device)
+            )
 
         # Generate the output of the model
         output = model(image)
