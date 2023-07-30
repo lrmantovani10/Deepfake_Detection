@@ -689,17 +689,19 @@ def classifier_metrics(output, labels):
     rounded_output = torch.round(output)
 
     # Creating masks
-    mask0 = labels.eq(0)
-    mask1 = labels.eq(1)
+    mask_output_0 = rounded_output.eq(0)
+    mask_output_1 = rounded_output.eq(1)
+    mask_labels_0 = labels.eq(0)
+    mask_labels_1 = labels.eq(1)
 
     # True positives
-    tp = rounded_output[mask1].eq(labels[mask1]).sum().item()
+    tp = mask_output_1.eq(mask_labels_1).sum().item()
 
     # False positives
-    fp = rounded_output[mask0].ne(labels[mask0]).sum().item()
+    fp = mask_output_1.eq(mask_labels_0).sum().item()
 
     # False negatives
-    fn = rounded_output[mask1].ne(labels[mask1]).sum().item()
+    fn = mask_output_0.eq(mask_labels_1).sum().item()
     return tp, fp, fn
 
 
