@@ -4,7 +4,7 @@ Model architecture diagram:
 
 ![image description](Diagram.png)
 
-The first part of the model is a Siamese network to detect similarities between real and fake images, and the second is a convolutional neural network with a binary classifier. Despite the accomplishments of the model described by the latter paper, its architecture is excessively large, and its hyperparameters are not supported by my hardware limitations, so I decided to decrease the batch size and shift from a "batch all" to a "batch hard" strategy when calculating the triplet loss to make better use of the data provided. Furthermore, believing that I could optimize the model even harder, I used an image preprocessing strategy that involved using OpenCV to draw facial features that help the model discern significant differences between real and deepfake components of the face, such as nose and eyes.
+The first part of the model is a Siamese network to detect similarities between real and fake images, and the second is a convolutional neural network with a binary classifier. Believing that I could optimize the model even harder, I used an image preprocessing strategy that involved using OpenCV to draw facial features that help the model discern significant differences between real and deepfake components of the face, such as nose and eyes. Despite the accomplishments of the model described by the latter paper, its architecture is excessively large, and its hyperparameters are not supported by my hardware limitations, so I decided to decrease the batch size to 8 and shift from a "batch all" to a "batch hard" strategy when calculating the triplet loss to make better use of the data provided. Despite this reduction, my execution of the program on Azure Cloud reached a fairly high test accuracy(over 0.7), suggesting that with a hardware that supports a larger batch size and a bigger dataset (like the Facebook Detection Challenge one used by the paper's researchers), similar if not potentially higher (due to the added OpenCV preprocessing step) metrics can be attained. 
 
 The file distribution of the project is as follows:
 * display.py &rarr; used to visualize certain images in the dataset during preprocessing. This allows us to visualize, for example, markings on the nose and eyes among the training images.
@@ -13,11 +13,3 @@ The file distribution of the project is as follows:
 * main.py &rarr; main file of the program, which determines when certain steps of the program's execution (such as training and testing) will be run.
 * paper.pdf &rarr; reference paper for the model's implementation. Describes the model's architecture, most of which was adopted by this implementation. However, hyperparameters such as batch size and learning rate were modified in my implementation. Furthermore, my preprocessing steps differed entirely from the paper at hand and instead involved using OpenCV to draw facial landmarks. 
 * unzip.py &rarr; script used to unzip the contents of the "data/" folder, used for training the model in a cloud computing environment where uploading a large number of files is not recommended.
-
-Note: Although I was unable to run the model for all the given epochs due to
-hardware limitations, the combination of the facial landmarks preprocessing step 
-and the high accuracy of the architecture proposed by the referenced paper lead
-me to believe that this is an innovative solution to the problem at hand, explaining
-why initial iterations of training already demonstrated an accuracy of ~80%. I 
-believe that with sufficient training and validation time with the parameters specified by
-the code, this number would rapidly increase to 90%. 
