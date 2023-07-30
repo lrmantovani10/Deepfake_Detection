@@ -496,7 +496,8 @@ def generate_cffn():
                 # Adding to model output
                 models_output.append(f_x)
 
-            return torch.cat(models_output)
+            concatenated_output = torch.cat(models_output, dim=1)
+            return concatenated_output
 
         # Function to generate the cffn output
         def cffn_output(self, x):
@@ -504,7 +505,7 @@ def generate_cffn():
             x = self.forward(x)
 
             # Reshaping to 128 dimensions
-            x = x.view(128, -1)
+            x = x.view(x.shape[0], 128, -1)
 
             # softmax function
             x = self.layers[1](x)
@@ -523,11 +524,11 @@ def generate_cnn():
         def __init__(self):
             super(CNN, self).__init__()
             # Batch normalization
-            self.bn = nn.BatchNorm2d(256)
+            self.bn = nn.BatchNorm2d(512)
             # Swish activation
             self.swish = nn.SiLU(inplace=True)
             # Convolutional layer
-            self.conv = nn.Conv2d(256, 256, kernel_size=3, stride=1, padding="same")
+            self.conv = nn.Conv2d(512, 256, kernel_size=3, stride=1, padding="same")
             # Final layer that generates the classifier output
             self.final = nn.Linear(2, 1)
             # Setting the layers to a module list
@@ -542,7 +543,7 @@ def generate_cnn():
 
             # Reshape to two dimensions with reduce_mean
             # and generate the output from the final linear layer
-            value_mean = out.view(2, -1).mean(dim=1)
+            value_mean = out.view(out.shape[0],-1, 2).mean(dim=1)
             result = self.layers[-1](value_mean)
             return result
 
@@ -570,37 +571,45 @@ def generate_model():
 
 # Euclidean distance between two tensors
 def euclidean_distance(t1, t2):
-    return torch.pow(t1 - t2, 2).sum(dim=1)
-
+    return torch.pow(t1 - t2, 2).sum(dim=2)
 
 # Function to compute the distance matrix between
 # anchor, positive, and negative samples
 def compute_distance_matrix(a, p, n):
-    distance_matrix = torch.zeros(a.size(0), 3)
-    distance_matrix[:, 0] = euclidean_distance(a, a)
-    distance_matrix[:, 1] = euclidean_distance(a, p)
-    distance_matrix[:, 2] = euclidean_distance(a, n)
+    distance_matrix = torch.zeros(a.size(0), a.size(1), 3)
+    distance_matrix[:, :, 0] = euclidean_distance(a, a)
+    distance_matrix[:, :, 1] = euclidean_distance(a, p)
+    distance_matrix[:, :, 2] = euclidean_distance(a, n)
     return distance_matrix
 
 
-# Use the batch ahrd strategy to compute the triplet loss
+# Use the batch hard strategy to compute the triplet loss
 # between the anchor, positive, and negative samples
 def batch_hard_triplet_loss(samples, margin=1):
     a, p, n = samples
     distance_matrix = compute_distance_matrix(a, p, n)
-    hard_negative = torch.argmax(distance_matrix[:, 2])
-    loss = torch.max(
-        torch.tensor(0.0), distance_matrix[:, 0] - distance_matrix[:, 1] + margin
-    )
-    loss += torch.max(
-        torch.tensor(0.0),
-        distance_matrix[:, 0][hard_negative] - distance_matrix[:, 2] + margin,
-    )
+    hard_negative = torch.argmax(distance_matrix[:, :, 2], dim = 0)
+
+    # Computing the maximum negative argument to find the hard negative
+    _, index_flat = distance_matrix[:, :, 2].view(-1).max(0)
+
+    # index_flat is a tensor. Use item() to get its value
+    index_flat = index_flat.item()
+
+    # Compute the 2D indices from the flat index
+    hard_negative = (index_flat // distance_matrix.size(1), index_flat % distance_matrix.size(1))
+
+    # Compute the loss
+    loss = distance_matrix[:, :, 0] - distance_matrix[:, :, 1]
+    loss -= (distance_matrix[:, :, 0][hard_negative[0]][hard_negative[1]] - distance_matrix[:, :, 2])
+    # Cast the loss to float
+    loss = loss.float()
+    loss = torch.argmax(loss + margin, torch.tensor(0))
     return torch.mean(loss)
 
 
 # Function to fit images to device and generate the output of the model
-def fit_forward_cffn(model, anchor, positive, negative, margin, device):
+def feed_forward_cffn(model, anchor, positive, negative, margin, device):
     # List of image forward passes
     image_fs = []
 
@@ -655,38 +664,44 @@ def regularize(model, regularization):
 
 
 # Function to compute the accuracy of the binary classifier
-def accuracy_ce(output, label):
-    # Compute the accuracy
-    accuracy = torch.sum(
-        # Check if the output is greater than 0.5
-        torch.round(output)
-        == label
-    ).item() / output.size(0)
-    return accuracy
+def accuracy_ce(output, labels):
+    # round the output values
+    output_rounded = torch.round(output)
 
+    # check if the rounded values are equal to their corresponding labels
+    equal = torch.eq(output_rounded, labels)
+
+    # calculate the proportion of correct predictions
+    return torch.mean(equal.float())
 
 # F-score calculation
 def p_metrics(tp, fp, fn):
-    precision = tp / (tp + fp)
-    recall = tp / (tp + fn)
-    return precision, recall, 2 * precision * recall / (precision + recall)
+    print(tp, fp, fn)
+    epsilon = 1e-7  # to prevent division by zero
+    precision = tp / (tp + fp + epsilon)
+    recall = tp / (tp + fn+ epsilon)
+    return precision, recall, 2 * precision * recall / (precision + recall + epsilon)
 
 
 # Computing the true positives, false positives, and false negatives
 # for the binary classifier
-def classifier_metrics(output, label):
+def classifier_metrics(output, labels):
+
+    # Rounding the output to see which category was predicted
+    rounded_output = torch.round(output)
+
+    # Creating masks
+    mask0 = labels.eq(0)
+    mask1 = labels.eq(1)
+
     # True positives
-    tp = torch.sum(
-        torch.round(output) == label and label == torch.ones(1).float()
-    ).item()
+    tp = rounded_output[mask1].eq(labels[mask1]).sum().item()
+
     # False positives
-    fp = torch.sum(
-        torch.round(output) != label and label == torch.zeros(1).float()
-    ).item()
+    fp = rounded_output[mask0].ne(labels[mask0]).sum().item()
+
     # False negatives
-    fn = torch.sum(
-        torch.round(output) != label and label == torch.ones(1).float()
-    ).item()
+    fn = rounded_output[mask1].ne(labels[mask1]).sum().item()
     return tp, fp, fn
 
 
@@ -726,7 +741,7 @@ def phase1_val(
     # Validation step -- fine-tuning the learning rate hyperparameter
     for anchor, positive, negative in val1_loader:
         # Forward propagation
-        _, image_fs = fit_forward_cffn(
+        _, image_fs = feed_forward_cffn(
             model, anchor, positive, negative, margin, device
         )
 
@@ -774,7 +789,7 @@ def phase1_train(
                 # After validation, quit the program's execution
                 quit()
             # Calculating the loss
-            loss, image_fs = fit_forward_cffn(
+            loss, image_fs = feed_forward_cffn(
                 model, anchor, positive, negative, margin, device
             )
 
@@ -833,7 +848,7 @@ def phase1_test(model, test1_loader, margin, device):
     total_accuracy = 0
     for anchor, positive, negative in test1_loader:
         # Forward propagation
-        _, image_fs = fit_forward_cffn(
+        _, image_fs = feed_forward_cffn(
             model, anchor, positive, negative, margin, device
         )
 
@@ -871,13 +886,6 @@ def phase2_val(
     for image, label in val2_loader:
         # Fit the image to the device
         image = image.to(device)
-        # Generate tensor from label
-        if batch_size == 1:
-            label = (
-                torch.zeros(1).float().to(device)
-                if label == 0
-                else torch.ones(1).float().to(device)
-            )
 
         # Generate the output of the model
         output = model(image)
@@ -945,18 +953,19 @@ def phase2_train(
                 phase2_val(model, val2_loader, device)
                 # After validation, quit the program's execution
                 quit()
+
+            # Reshaping the labels to (batch_size, 1)
+            label = label.view(-1, 1)
+
             # Fit the image to the device
             image = image.to(device)
-            # Generate tensor from label if label is a number
-            if label == 0 or label == 1:
-                label = (
-                    torch.zeros(1).float().to(device)
-                    if label == 0
-                    else torch.ones(1).float().to(device)
-                )
 
             # Generate the output of the model
             output = model(image)
+
+            # Casting to float
+            output = output.float()
+            label = label.float()
 
             # Compute the accuracy
             accuracy = accuracy_ce(output, label)
@@ -1030,13 +1039,6 @@ def phase2_test(model, test2_loader, device):
     for image, label in test2_loader:
         # Fit the image to the device
         image = image.to(device)
-        # Generate tensor from label if label is a number
-        if label == 0 or label == 1:
-            label = (
-                torch.zeros(1).float().to(device)
-                if label == 0
-                else torch.ones(1).float().to(device)
-            )
 
         # Generate the output of the model
         output = model(image)

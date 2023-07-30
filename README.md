@@ -1,5 +1,5 @@
 # Deepfake Detection Project
-I recently embarked on a personal side project of attempting to detect whether an image posted online is a deepfake or not. To do so, I created a two-step model inspired by this paper: https://www.semanticscholar.org/paper/Deep-Fake-Image-Detection-Based-on-Pairwise-Hsu-Zhuang/5598872d32fd15e367584eb99c07ae79f794243e, with an implementation adapted from this paper: https://cs230.stanford.edu/projects_spring_2020/reports/38857501.pdf. 
+I recently embarked on a personal side project of attempting to detect whether an image posted online is a deepfake or not. To do so, I created a two-step model inspired by [!this paper](https://www.semanticscholar.org/paper/Deep-Fake-Image-Detection-Based-on-Pairwise-Hsu-Zhuang/5598872d32fd15e367584eb99c07ae79f794243e), with an implementation adapted from [!this paper](https://cs230.stanford.edu/projects_spring_2020/reports/38857501.pdf). 
 Model architecture diagram:
 
 ![image description](Diagram.png)
