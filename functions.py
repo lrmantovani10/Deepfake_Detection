@@ -602,9 +602,8 @@ def batch_hard_triplet_loss(samples, margin=1):
     # Compute the loss
     loss = distance_matrix[:, :, 0] - distance_matrix[:, :, 1]
     loss -= (distance_matrix[:, :, 0][hard_negative[0]][hard_negative[1]] - distance_matrix[:, :, 2])
-    # Cast the loss to float
-    loss = loss.float()
-    loss = torch.argmax(loss + margin, torch.tensor(0))
+    # Set negative values to zero
+    loss = torch.max(loss + margin, torch.tensor(0))
     return torch.mean(loss)
 
 
@@ -638,8 +637,8 @@ def triplet_accuracy(anchor, positive, negative, margin=1):
     distance_matrix = compute_distance_matrix(anchor, positive, negative)
 
     # Obtain the distance of anchor-positive and anchor-negative pairs
-    anchor_positive_distance = distance_matrix[:, 1]
-    anchor_negative_distance = distance_matrix[:, 2]
+    anchor_positive_distance = distance_matrix[:,:, 1]
+    anchor_negative_distance = distance_matrix[:,:, 2]
 
     # Check if the distances satisfy the margin condition
     correct_triplets = torch.logical_and(
@@ -647,8 +646,8 @@ def triplet_accuracy(anchor, positive, negative, margin=1):
         anchor_positive_distance - anchor_negative_distance < margin,
     )
 
-    # Calculate the accuracy
-    accuracy = torch.sum(correct_triplets).item() / anchor.size(0)
+    # Calculate the accuracy, across the batch
+    accuracy = torch.sum(correct_triplets).item() / (anchor.size(0) * anchor.size(1))
     return accuracy
 
 
@@ -676,7 +675,6 @@ def accuracy_ce(output, labels):
 
 # F-score calculation
 def p_metrics(tp, fp, fn):
-    print(tp, fp, fn)
     epsilon = 1e-7  # to prevent division by zero
     precision = tp / (tp + fp + epsilon)
     recall = tp / (tp + fn+ epsilon)
